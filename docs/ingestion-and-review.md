@@ -7,18 +7,19 @@ path, and keyword controls.
 
 Automatic collection is opt-in twice: `ENABLE_SOURCE_SCHEDULER=true` starts the local
 process scheduler, and each website scraper must independently enable its schedule.
-Both defaults are off. The Sources UI displays global and per-scraper state; manual
-collection remains available while automatic scheduling is off. Lambda deployments
-must not start this in-process scheduler and may later use the same per-source setting
-from an EventBridge dispatcher if scheduled collection is retained.
+Development Compose enables the global switch; the application fallback and AWS
+disable it. Per-source scheduling defaults off. The Sources UI displays global and per-scraper state; manual
+collection remains available while automatic scheduling is off. The Lambda adapter
+disables ASGI lifespan, so it never starts this scheduler. The current SAM template
+does not configure an EventBridge collection dispatcher.
 
 Evidence assessment and signal interpretation preserve provider metadata separately
 from deterministic review state. Hypothetical signals cannot claim supporting
 evidence. Unresolved or ambiguous entities remain review-blocking, and accepted signals
 retain the client context and disruption catalog versions used for grounding.
 
-Filtering and interpretation are protocol-based. By default, deterministic stubs make
-local runs repeatable. When configured for Bedrock, the filter classifies evidence into
+Filtering and interpretation are protocol-based. Development Compose defaults to Gemini;
+deterministic stubs are available for repeatable runs. With Gemini or Bedrock, the filter classifies evidence into
 `ACCEPT`, `REVIEW`, `REJECT`, or `QUARANTINE`; only accepted evidence proceeds to the
 interpreter. The interpreter proposes classification, signal type, textual entity
 mentions, time window, probability, severity, and extraction confidence. Both adapters
@@ -60,8 +61,9 @@ If Bedrock remains rate-limited after the SDK retry policy is exhausted, collect
 provider for that run and marks the current and remaining new evidence as deferred.
 The evidence remains stored. Use **Process / retry** on its Evidence card, or call
 `POST /api/evidence/{id}/process`, after provider capacity recovers; this does not
-scrape the source again. Evidence already linked to signal history and duplicate
-occurrence records cannot be reprocessed through this endpoint.
+scrape the source again. Evidence with a pending or accepted signal attempt cannot be reprocessed;
+all-rejected history allows a new attempt. Duplicate occurrence records cannot be
+processed through this endpoint.
 
 Schema compliance does not make an LLM answer operationally authoritative. Entity
 mentions are grounded through the client gateway, mapped disruptions pass local JSON
@@ -84,9 +86,9 @@ dependent duplicate records first, then retry the canonical item. Duplicate reco
 are labelled with the canonical evidence ID they reference.
 
 Canonical evidence cards also provide **Delete unprotected duplicates**. A preview
-counts eligible and protected direct duplicates before confirmation. The deletion runs
-in one database transaction, removes only eligible records, and reports every skipped
-protected record. API callers may request `delete_canonical=true`; the canonical record
+counts eligible and protected direct duplicates before confirmation. PostgreSQL performs the cleanup in one database transaction. DynamoDB deletes
+eligible duplicates sequentially, so an error can leave a partially completed cleanup.
+Successful responses report deleted IDs and skipped protected records. API callers may request `delete_canonical=true`; the canonical record
 is deleted only if it is unprotected after duplicate cleanup.
 
 Collection continues to retain lightweight duplicate occurrence records by default.

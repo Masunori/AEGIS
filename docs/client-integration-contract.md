@@ -10,6 +10,19 @@ experiments, planning-cycle snapshots, and non-authoritative result copies. Dedi
 `simulation_result_copies` rows belong to immutable experiments; planning-cycle result
 dictionaries are retained inside the cycle snapshot.
 
+## Industry-specific models
+
+Clients define entity types, operational state, disruption types, intervention types,
+and result metrics. The examples below use a fictional resource and work-item model
+solely to illustrate the wire format. `RESOURCE`, `WORK_ITEM`, `CAPACITY_CHANGE`, and
+`PRIORITIZE` are example client-defined values, not platform enums or guarantees about
+the deployed demo client's catalog. Use the types advertised by your connected client.
+
+An existing simulator needs an integration adapter exposing these endpoints and
+versioned contracts. Result dictionaries may use industry-specific measures; the
+platform's current automatic ranking still uses the demo defaults documented in
+[Simulation and planning](simulation-and-planning.md#ranking-defaults).
+
 ## Transport and errors
 
 Configure a versioned base URL, for example:
@@ -103,13 +116,13 @@ understand.
   "contract_version": "entity-resolution-v1",
   "entity_registry_version": "registry-v7",
   "entity_types": {
-    "PORT": {
-      "description": "A maritime port or terminal",
-      "optional_hints": ["name", "country_code", "unlocode"]
+    "RESOURCE": {
+      "description": "An operational resource with finite capacity",
+      "optional_hints": ["name", "site", "resource_code"]
     }
   },
   "resolution_statuses": ["RESOLVED", "AMBIGUOUS", "NOT_FOUND"],
-  "examples": [{"mention": "Port of Singapore", "expected_type": "PORT"}]
+  "examples": [{"mention": "Resource Alpha", "expected_type": "RESOURCE"}]
 }
 ```
 
@@ -123,8 +136,8 @@ Actual grounding still occurs through `/entities/resolve`.
 
 ```json
 {
-  "query": "Singapore",
-  "entity_types": ["PORT"],
+  "query": "Alpha",
+  "entity_types": ["RESOURCE"],
   "context_version": "context-v3",
   "limit": 10
 }
@@ -133,7 +146,7 @@ Actual grounding still occurs through `/entities/resolve`.
 ```json
 {
   "results": [
-    {"id": "port-sg", "entity_type": "PORT", "name": "Port of Singapore"}
+    {"id": "resource-alpha", "entity_type": "RESOURCE", "name": "Resource Alpha"}
   ]
 }
 ```
@@ -146,7 +159,7 @@ AEGIS currently sends one mention per request:
 
 ```json
 {
-  "mentions": [{"value": "Port of Singapore", "entity_type": "PORT"}],
+  "mentions": [{"value": "Resource Alpha", "entity_type": "RESOURCE"}],
   "context_version": "context-v3"
 }
 ```
@@ -157,7 +170,7 @@ AEGIS currently sends one mention per request:
     {
       "status": "RESOLVED",
       "candidates": [
-        {"id": "port-sg", "entity_type": "PORT", "name": "Port of Singapore"}
+        {"id": "resource-alpha", "entity_type": "RESOURCE", "name": "Resource Alpha"}
       ]
     }
   ]
@@ -173,7 +186,7 @@ references; resolution should be read-only.
 
 ```json
 {
-  "entity_ids": ["port-sg"],
+  "entity_ids": ["resource-alpha"],
   "fields": ["status", "capacity"],
   "context_version": "context-v3"
 }
@@ -182,7 +195,7 @@ references; resolution should be read-only.
 ```json
 {
   "state_version": "state-2026-08-30",
-  "results": [{"entity_id": "port-sg", "status": "ACTIVE", "capacity": 100}]
+  "results": [{"entity_id": "resource-alpha", "status": "ACTIVE", "capacity": 100}]
 }
 ```
 
@@ -199,10 +212,10 @@ client-grounded entities:
 {
   "entity_scope": [
     {
-      "entity_id": "port-sg",
-      "entity_type": "PORT",
-      "display_name": "Port of Singapore",
-      "attributes": {"country": "SG"}
+      "entity_id": "resource-alpha",
+      "entity_type": "RESOURCE",
+      "display_name": "Resource Alpha",
+      "attributes": {"site": "Site A"}
     }
   ]
 }
@@ -225,8 +238,8 @@ for local validation:
   "catalog_version": "disruptions-v4",
   "disruption_types": [
     {
-      "type": "PORT_CAPACITY_CHANGE",
-      "valid_target_types": ["PORT"],
+      "type": "CAPACITY_CHANGE",
+      "valid_target_types": ["RESOURCE"],
       "payload_schema": {
         "type": "object",
         "additionalProperties": false,
@@ -251,8 +264,8 @@ and capability versions when supported contracts change.
   "context_version": "context-v3",
   "catalog_version": "disruptions-v4",
   "disruption": {
-    "type": "PORT_CAPACITY_CHANGE",
-    "payload": {"target_ids": ["port-sg"], "capacity_multiplier": 0.7}
+    "type": "CAPACITY_CHANGE",
+    "payload": {"target_ids": ["resource-alpha"], "capacity_multiplier": 0.7}
   }
 }
 ```
@@ -262,8 +275,8 @@ and capability versions when supported contracts change.
   "valid": true,
   "errors": [],
   "normalized_disruption": {
-    "type": "PORT_CAPACITY_CHANGE",
-    "payload": {"target_ids": ["port-sg"], "capacity_multiplier": 0.7}
+    "type": "CAPACITY_CHANGE",
+    "payload": {"target_ids": ["resource-alpha"], "capacity_multiplier": 0.7}
   }
 }
 ```
@@ -285,8 +298,8 @@ The client classifies each complete-scenario disruption against the frozen state
     {
       "disruption_id": "signal-1-v1",
       "classification": "OBSERVED",
-      "disruption_type": "PORT_CAPACITY_CHANGE",
-      "normalized_payload": {"target_ids": ["port-sg"], "capacity_multiplier": 0.7},
+      "disruption_type": "CAPACITY_CHANGE",
+      "normalized_payload": {"target_ids": ["resource-alpha"], "capacity_multiplier": 0.7},
       "source_signal_version_id": "signal-1-v1"
     }
   ]
@@ -303,8 +316,8 @@ The client classifies each complete-scenario disruption against the frozen state
       "disruption_id": "signal-1-v1",
       "application_status": "ALREADY_REFLECTED",
       "normalized_disruption": {
-        "type": "PORT_CAPACITY_CHANGE",
-        "payload": {"target_ids": ["port-sg"], "capacity_multiplier": 0.7}
+        "type": "CAPACITY_CHANGE",
+        "payload": {"target_ids": ["resource-alpha"], "capacity_multiplier": 0.7}
       },
       "reason_code": "PRESENT_IN_FROZEN_STATE"
     }
@@ -327,8 +340,8 @@ This mirrors disruption discovery, using `intervention_types`:
   "catalog_version": "interventions-v2",
   "intervention_types": [
     {
-      "type": "EXPEDITE",
-      "valid_target_types": ["SHIPMENT"],
+      "type": "PRIORITIZE",
+      "valid_target_types": ["WORK_ITEM"],
       "payload_schema": {
         "type": "object",
         "additionalProperties": false,
@@ -353,7 +366,7 @@ This mirrors disruption discovery, using `intervention_types`:
 {
   "context_version": "context-v3",
   "catalog_version": "interventions-v2",
-  "intervention": {"type": "EXPEDITE", "payload": {"target_ids": ["shipment-42"]}}
+  "intervention": {"type": "PRIORITIZE", "payload": {"target_ids": ["work-item-42"]}}
 }
 ```
 
@@ -362,8 +375,8 @@ This mirrors disruption discovery, using `intervention_types`:
   "valid": true,
   "errors": [],
   "normalized_intervention": {
-    "type": "EXPEDITE",
-    "payload": {"target_ids": ["shipment-42"]}
+    "type": "PRIORITIZE",
+    "payload": {"target_ids": ["work-item-42"]}
   }
 }
 ```
@@ -387,8 +400,8 @@ Invalidity and side-effect rules are the same as disruption validation.
       "source_signal_version_id": "signal-1-v1",
       "application_status": "ALREADY_REFLECTED",
       "normalized_disruption": {
-        "type": "PORT_CAPACITY_CHANGE",
-        "payload": {"target_ids": ["port-sg"], "capacity_multiplier": 0.7}
+        "type": "CAPACITY_CHANGE",
+        "payload": {"target_ids": ["resource-alpha"], "capacity_multiplier": 0.7}
       },
       "reason_code": "PRESENT_IN_FROZEN_STATE"
     }
@@ -434,8 +447,8 @@ For failure, return a sanitized `error` object with `code` and `message`.
   "id": "run-123",
   "status": "COMPLETED",
   "results": {
-    "late_shipments": 4,
-    "average_delay_hours": 1.5,
+    "uncompleted_work_items": 4,
+    "average_wait_hours": 1.5,
     "total_cost": 125000
   }
 }

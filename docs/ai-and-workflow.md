@@ -2,11 +2,12 @@
 
 Seven purpose-specific protocols isolate probabilistic work: `FilterProvider`,
 `InterpreterProvider`, `EffectMappingProvider`, `RelationshipProvider`, `RiskProvider`,
-`HypothesisProvider`, and `PlannerProvider`. Development uses transparent deterministic stubs; provider
-selection is centralized in the integration factory.
+`HypothesisProvider`, and `PlannerProvider`. Development Compose selects Gemini for filtering, interpretation, hypotheses, risk,
+and planning; AWS selects Bedrock. Deterministic stubs remain available for all seven
+protocols. Provider selection is centralized in the integration factory.
 
 `HypothesisProvider` is a review-only boundary. It turns a human planning
-prompt into strict hypothetical signal proposals using Bedrock Converse structured output or a
+prompt into strict hypothetical signal proposals using Gemini, Bedrock Converse structured output, or a
 deterministic stub. The server does not persist this output. The browser retains it in
 `localStorage`, and only user-confirmed proposals enter scenario validation.
 
@@ -21,6 +22,16 @@ entity-resolution capability manifest before interpretation. The interpreter rec
 it as untrusted reference data so extracted mentions are more likely to match
 client-supported entity forms. It may not return trusted client identifiers;
 authoritative grounding still occurs afterward through `ClientGateway.resolve_entity`.
+
+## Local provider selection
+
+Set `FILTER_PROVIDER`, `INTERPRETER_PROVIDER`, `HYPOTHESIS_PROVIDER`, `RISK_PROVIDER`,
+and `PLANNER_PROVIDER` independently to `gemini`, `bedrock`, or `stub` in `.env.local`.
+All workflows using the same vendor share its configured model ID. Apply environment
+changes with `docker compose --env-file .env.local -f compose.dev.yml up -d server`.
+The application does not watch or automatically load this file when run directly.
+See [Switching local AI providers](operations.md#switching-local-ai-providers) for
+credentials, precedence, and the current Docker limitation on AWS credentials.
 
 ## Bedrock providers
 
@@ -55,8 +66,10 @@ connection and read timeouts are bounded by `BEDROCK_TIMEOUT_SECONDS`.
 
 `BedrockHypothesisProvider`, `BedrockRiskProvider`, and `BedrockPlannerProvider` follow
 the same structured-output and strict Pydantic validation path. When
-`HYPOTHESIS_PROVIDER` is omitted, Bedrock is selected if `BEDROCK_MODEL_ID` is configured;
-otherwise the deterministic stub is used.
+`HYPOTHESIS_PROVIDER` is absent from the server process environment, Bedrock is
+selected if `BEDROCK_MODEL_ID` is configured; otherwise the deterministic stub is used.
+Development Compose explicitly supplies a Gemini default, so omitting this variable
+from `.env.local` does not trigger that application fallback.
 
 Before interpreting accepted evidence, AEGIS fetches both entity-resolution
 capabilities and the versioned disruption catalog. The interpreter must return an
@@ -70,27 +83,29 @@ from the subset directly targeted by the disruption. Both sets are grounded, but
 the target subset may populate a client disruption payload. This preserves upstream
 and downstream context without applying the selected effect to unrelated entities.
 
-## Stub planner panel
+## Planner panel
 
 Each planning cycle freezes `planner_mode` as `single` or `panel`. Panel mode invokes
-three deterministic role-labelled planners—continuity, cost, and resilience—through a
-bounded coordinator implementing the existing `PlannerProvider` protocol. There is no
-free-form conversation, per-role prompt configuration, skill assignment, resource budget, or
-external model call in this panel iteration. Every draft still requires client
-validation and simulation before deterministic ranking and approval.
+1–5 role-labelled planners (default 3), selected by `panel_agent_count`, through a
+bounded coordinator implementing `PlannerProvider`. `PLANNER_PROVIDER` selects
+stub, Gemini, or Bedrock implementations. Model panels read the corresponding
+`planner_1` through `planner_5` prompt overrides. Bedrock retains successful
+partial results and reports failed roles as warnings; Gemini propagates a failed
+panel call. The panel does not implement voting or free-form agent conversation.
+Every draft still requires client validation and simulation before ranking and approval.
 
 ## Operator prompt configuration
 
-Bedrock filter, interpreter, and planner adapters read their system prompts when the
+Gemini and Bedrock filter, interpreter, and planner adapters read their system prompts when the
 provider is constructed. Built-in safe defaults are used unless an operator stores an
 override through `/api/settings/prompts`. Overrides are platform configuration in the
-`agent_prompts` table; they do not change the strict response schemas or any
+PostgreSQL `agent_prompts` table or DynamoDB `PROMPT#agent` items; they do not change the strict response schemas or any
 deterministic or client-authoritative validation boundary. The deterministic stub
 providers do not use these prompts, and risk and hypothesis prompts are not currently
 editable through this API.
 
 The LLM never supplies provider metadata or supporting evidence IDs. The adapter records
-the configured model and AWS request ID itself, and derives supporting evidence from
+the configured model and provider request metadata itself, and derives supporting evidence from
 the input evidence (or none for a hypothetical). Entity output remains textual mentions;
 authoritative IDs still come only from `ClientGateway` grounding.
 

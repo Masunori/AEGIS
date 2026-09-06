@@ -1,34 +1,36 @@
 # DynamoDB data model
 
-This is the implementation contract for the hackathon DynamoDB backend. PostgreSQL
+This describes the current hackathon DynamoDB backend and its implementation limits. PostgreSQL
 remains the behavioral reference; selecting a backend never falls back or dual-writes.
 
 ## Table and indexes
 
 Use one on-demand table with string keys `PK` and `SK`, deletion TTL attribute `ttl`,
-and optimistic integer `version`. Resource name is parameterized.
+and an integer `version` on selected aggregates. Version checks are not universal. Resource name is parameterized.
 
 - Primary key: aggregate-local reads and bounded child collections.
 - `GSI1PK`/`GSI1SK`: type lists in stable application order.
 - `GSI2PK`/`GSI2SK`: sparse operational lookups: due sources, content hashes, and
   experiment idempotency keys.
 
-No repository method performs `Scan`. List methods require a bounded `limit` and
-opaque continuation token containing the DynamoDB exclusive-start key.
+No repository method performs `Scan`. Public repository list methods accept a bounded `limit` and continuation token.
+Some internal queries, including due sources, reverse references, relationships, and
+risk candidates, read only one DynamoDB response page and do not follow
+`LastEvaluatedKey`; they can omit records when those collections grow.
 
 | Entity | PK | SK | Index use |
 | --- | --- | --- | --- |
 | Source | `SOURCE#id` | `META` | GSI1 `SOURCE` / `name#id`; GSI2 `DUE` / `next_run_at#id` only while enabled and scheduled |
 | Evidence metadata | `EVIDENCE#id` | `META` | GSI1 `EVIDENCE` / `collected_at#id`; GSI2 `HASH#sha256` / `collected_at#id` |
-| Evidence chunk | `EVIDENCE#id` | `CONTENT#000001` | none |
+| Evidence chunk | `EVIDENCE#id` | `CONTENT#000000` (zero-based) | none |
 | Assessment | `EVIDENCE#id` | `ASSESSMENT#time#id` | none |
-| Signal | `SIGNAL#id` | `META` | GSI1 `SIGNAL` / reverse-created-time plus ID |
+| Signal | `SIGNAL#id` | `META` | GSI1 `SIGNAL` / created timestamp plus ID (queried descending) |
 | Signal version | `SIGNAL#id` | `VERSION#000001` | GSI2 `SIGNAL_VERSION#id` / `META` |
-| Signal evidence/entity/effect/relationship | `SIGNAL#id` | typed immutable child key | relationship lookup keys only where required |
+| Signal entities and mapping outcome | `SIGNAL#id` | `VERSION#000001` payload | Stored inside the version payload; updated during processing |
 | Experiment | `EXPERIMENT#id` | `META` | GSI1 list; GSI2 `EXPERIMENT_KEY#hash` / `META` |
-| Result copy | `EXPERIMENT#id` | `RESULT#run_id` | none |
-| Planning cycle | `PLANNING#id` | `META` | GSI1 `PLANNING` / reverse-updated-time plus ID |
-| Prompt override | `PROMPT#agent` | `META` | none; known agent keys are batch-read |
+| Result copy | `EXPERIMENT#id` | `RESULT#run_id` | GSI2 `RESULT#run_id` / `META` |
+| Planning cycle | `PLANNING#id` | `META` | GSI1 `PLANNING` / cycle ID |
+| Prompt override | `PROMPT#agent` | `META` | none; known agent keys are read individually |
 
 Scenario and plan definition items follow the same `TYPE#id`/`META` pattern and their
 existing stable-ID ordering on GSI1.
@@ -40,28 +42,36 @@ existing stable-ID ordering on GSI1.
   removes them. Run completion conditionally advances `next_run_at`.
 - Evidence: transact source-existence check, conditional hash/id write, and chunks.
   Lists use GSI1; deletion impact queries the evidence aggregate and bounded reverse
-  references. Duplicate cleanup uses a transaction and returns protected skips.
-- Signals: an aggregate query returns metadata and immutable children. Creating a
-  version transactionally asserts its number/current pointer. Review updates require
-  the expected `version`; immutable version items are never overwritten.
-- Experiments: GSI2 resolves the idempotency key; `attribute_not_exists(PK)` prevents
-  duplicate creation. Submission/result transitions require expected status/version.
+  references. Duplicate cleanup deletes eligible records sequentially and returns protected skips
+  when it completes; it is not one transaction.
+- Signals: a strong lookup item locates the version payload. Candidate creation
+  transactionally writes metadata, the first version, its lookup, and evidence
+  references. Processing overwrites the version payload without a version condition;
+  human review uses a conditional aggregate update. Version rows are not immutable
+  at the storage layer.
+- Experiments: a strongly read `EXPERIMENT_KEY#key` lock and conditional transaction
+  deduplicate creation. Submission checks the existing run ID in application code,
+  then writes without an expected-version condition. Result saving transactionally
+  writes the result and completion status, checking package existence only.
 - Planning cycles: point reads and conditional snapshot replacement. Large snapshots
   are split into deterministic `SECTION#name#chunk` children before the item limit.
 - Prompts: point gets/writes/deletes for the fixed allow-listed agent names.
 
 Foreign-key behavior is reproduced with explicit checks. Source deletion checks the
 source-evidence reference partition; evidence deletion checks signal and duplicate
-references; experiment/result records are retained. Multi-item invariants use
-`TransactWriteItems` and never exceed 100 unique items.
+references; experiment/result records are retained. Selected creation and update paths use `TransactWriteItems`. Other paths use
+separate reads and writes or batch writes, so cross-item checks do not universally
+protect against concurrent changes. The transaction helper limits requests to 100 items.
 
 ## Content limits and serialization
 
-The API accepts at most 256 KiB of extracted UTF-8 evidence text. Content is stored in
-chunks of at most 64 KiB UTF-8 bytes, with byte count, SHA-256, chunk count, and media
-type on metadata. Four chunks therefore fit the application limit while every item
-stays well below DynamoDB's 400 KB maximum. Original uploaded documents are not
-retained in DynamoDB or S3.
+The DynamoDB content codec accepts at most 256 KiB of UTF-8 evidence text and
+splits it into binary chunks of at most 64 KiB. Evidence metadata retains the
+content hash and a content reference; the adapter does not store separate byte-count
+or chunk-count fields for evidence. Reads concatenate the ordered content chunks.
+The text limit does not guarantee that structured content or other aggregate payloads
+fit DynamoDB's item limit. Original uploaded documents are not retained in DynamoDB
+or S3.
 
 Datetimes are UTC ISO-8601 strings with `Z`; enum values are strings; floats are
 converted through decimal strings to `Decimal`; sets are stored as ordered lists when
@@ -83,16 +93,23 @@ loads a developer AWS profile.
 
 ## Concurrency and failure semantics
 
-Every mutable aggregate has `version`. Updates use `version = :expected` and increment
-on success; conditional failures become domain conflict errors. Content/idempotency
-creation uses `attribute_not_exists`. A scheduled collector must acquire a short
-conditional lease (`lease_until`, `lease_owner`) before fetching and clears or expires
-it after recording the run. Repository errors are translated to stable not-found,
-conflict, validation, throttling, or unavailable errors. They never trigger a
-PostgreSQL fallback.
+Source updates, signal reviews, and planning snapshot replacements use conditional
+version checks. Evidence edits/archive/redaction, prompt and definition writes, and
+experiment submission do not all have equivalent protection. Concurrent writes on
+those paths can overwrite one another. Evidence content changes and duplicate cleanup
+span multiple writes; failures can leave partial changes.
 
-On-demand capacity has no idle throughput charge. The SAM template should additionally
-set conservative table/GSI maximum throughput and alarms to contain accidental usage.
+Scheduled collection acquires a conditional `LEASE` item with `lease_until` and
+`lease_owner` before fetching. The scheduler requests a 15-minute lease and releases
+it afterward; there is no lease-renewal loop. AWS disables this scheduler.
+
+The persistence error helper maps SDK errors to domain errors where adapters invoke
+it; there is no automatic PostgreSQL fallback. This backend does not provide a
+uniform transactional or optimistic-concurrency guarantee across all repositories.
+
+The SAM template enables table retention, deletion protection, encryption,
+point-in-time recovery, and table-level maximum throughput. It does not define
+CloudWatch alarms or separate GSI throughput caps.
 
 ## Implemented item layouts
 
@@ -113,4 +130,6 @@ replacement transaction; snapshots above 90 chunks are rejected before writing.
 
 Continuation tokens contain format version `1`, query identity, exclusive-start key,
 and a canonical SHA-256 integrity digest. They are capped at 16 KiB, so malformed,
-modified, and cross-query tokens fail with a storage-neutral validation error.
+digest-mismatched, and cross-query tokens fail with a storage-neutral validation
+error. The digest is unkeyed: it detects inconsistent contents, not deliberate
+modification by someone who recomputes the digest.

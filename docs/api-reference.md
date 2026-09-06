@@ -7,9 +7,11 @@
 | `GET` | `/health/db` | Deprecated PostgreSQL-specific diagnostic |
 | `GET` | `/health/client` | Sanitized client identity and versions |
 | `GET/POST` | `/api/sources` | Platform source management |
+| `GET/PATCH/DELETE` | `/api/sources/{id}` | Inspect, edit, or delete a source |
 | `GET` | `/api/sources/scheduling/status` | Global automatic-collection status |
 | `POST` | `/api/sources/{id}/collect` | Collect website evidence |
 | `GET/POST` | `/api/evidence` | Evidence inbox and JSON ingestion |
+| `GET` | `/api/evidence/{id}` | Read evidence |
 | `POST` | `/api/evidence/upload` | Multipart upload directly to evidence |
 | `PATCH/DELETE` | `/api/evidence/{id}` | Edit or delete unprotected evidence |
 | `POST` | `/api/evidence/{id}/archive` | Archive evidence |
@@ -20,6 +22,10 @@
 | `DELETE` | `/api/evidence/{id}/raw-content` | Redact raw content while retaining metadata |
 | `POST` | `/api/evidence/{id}/process` | Assess, interpret, ground, and map already-stored evidence |
 | `GET` | `/api/evidence/{id}/processing-eligibility` | Explain retry eligibility and list prior signal attempts |
+| `GET` | `/api/signals` | List signals |
+| `POST` | `/api/signals/from-evidence/{evidence_id}` | Process evidence into a signal |
+| `GET` | `/api/signals/versions/{version_id}` | Read a signal version |
+| `POST` | `/api/signals/versions/{source_version_id}/relationships` | Add a signal relationship |
 | `POST` | `/api/signals/{id}/review` | Human signal decision |
 | `GET/POST` | `/api/scenarios` | Generic scenario definitions |
 | `GET/POST` | `/api/plans` | Generic plan definitions |
@@ -27,14 +33,14 @@
 | `POST` | `/api/plans/{id}/reject` | Reject a plan |
 | `POST` | `/api/experiments` | Freeze an immutable experiment |
 | `POST` | `/api/experiments/{id}/submit` | Submit to the client |
-| `GET` | `/api/experiments/{id}/results` | Poll and copy authoritative results |
+| `POST` | `/api/experiments/{id}/refresh-results` | Poll and copy authoritative results |
 | `GET` | `/api/settings/prompts` | List effective filter, interpreter, and planner prompts |
 | `PUT` | `/api/settings/prompts/{agent}` | Store an operator prompt override |
 | `DELETE` | `/api/settings/prompts/{agent}` | Restore the built-in prompt |
 
 Operational model, document/candidate, local disruption, local simulation, ranking,
 and legacy run endpoints have been removed.
-# Planning cycles
+## Planning cycles
 
 - `POST /api/planning/cycles/entities/search` proxies a bounded, read-only search to the
   authoritative client registry and returns structured candidates for explicit scope selection.
@@ -46,7 +52,8 @@ and legacy run endpoints have been removed.
   submitting a simulation. Body: `{"planning_starts_at": "2026-08-28T00:00:00Z",
   "planning_ends_at": "2026-09-27T00:00:00Z", "generation_limit": 5}`. The server
   loads eligible signal references. The request may also include `planner_mode`
-  (`single` or `panel`), up to ten browser-confirmed hypotheses, and the same
+  (`single` or `panel`), `panel_agent_count` (1–5, default 3), `objectives`,
+  `hard_constraints`, up to ten browser-confirmed hypotheses, and the same
   `entity_scope` used to generate them.
 - `GET /api/planning/cycles` and `GET /api/planning/cycles/{cycle_id}` inspect snapshots.
 - `POST /api/planning/cycles/{cycle_id}/scenario` selects one to 20 generated disruption
@@ -56,7 +63,9 @@ and legacy run endpoints have been removed.
   from the frozen scenario, passes the results unchanged to the selected planner, validates
   its interventions through the client, and returns the results and plans together.
 - `POST /api/planning/cycles/{cycle_id}/baseline/refresh` refreshes a queued run and
-  invokes the planner exactly once when authoritative results become available.
+  invokes the planner once authoritative results are available and no plans are
+  retained. Empty results or failures can cause later requests to invoke it again;
+  this is not an exactly-once execution guarantee.
 - `POST /api/planning/cycles/{cycle_id}/advance` is the first-party polling operation. It
   progresses baseline refresh, plan generation, every intervention simulation, and
   deterministic ranking, then stops at `RECOMMENDED` for human approval or rejection.
@@ -75,7 +84,7 @@ any planning request schema.
 
 Planning baseline and intervention runs are not experiment-package submissions. Their
 run IDs and returned result dictionaries are retained in the `planning_cycles`
-snapshot; `/api/experiments/{id}/results` and `simulation_result_copies` apply only to
+snapshot; `/api/experiments/{id}/refresh-results` and `simulation_result_copies` apply only to
 the immutable reviewed-signal experiment workflow.
 
 The connected client integration additionally exposes `POST /disruptions/reconcile`.

@@ -2,14 +2,16 @@
 
 Scenarios and plans are platform-owned, simulation-agnostic envelopes. Disruptions must
 first be normalized by the client. Plan actions are opaque typed interventions with
-client entity references and payloads; the platform does not interpret routes,
-shipments, inventory, or other integration-specific ontology.
+client entity references and payloads; the client defines the meaning of its
+entities, resources, processes, and operational changes. A disruption represents a
+change to simulated conditions; an intervention represents a proposed response.
 
 An experiment freezes context and state versions, signal versions, normalized
 disruptions, provenance, probability, and an idempotency key. Submission
 uses `POST /api/experiments/{id}/submit`; the client owns queued/running/completed/failed
 lifecycle state and authoritative metrics. Failed or incomplete runs never create a
-result copy. Completed copies preserve the exact experiment versions and client run ID.
+result copy. `POST /api/experiments/{id}/refresh-results` polls the client and
+retains completed results. Completed copies preserve the exact experiment versions and client run ID.
 
 Planning cycles use a separate persistence path. Baseline and intervention submissions
 are sent directly from the frozen planning scenario and plan proposal; they do not
@@ -24,10 +26,11 @@ policy and configured hard constraints.
 
 ## Risk and planning workflow
 
-The planning layer has one configured risk provider. Set `RISK_PROVIDER=stub` and
-`PLANNER_PROVIDER=stub`; unknown values fail at provider construction. Each cycle
-chooses either the single stub planner or the bounded deterministic role panel. Both
-implement the same planner protocol and may return several alternatives.
+The planning layer selects risk and planner providers independently through
+`RISK_PROVIDER` and `PLANNER_PROVIDER`: `stub`, `gemini`, or `bedrock`. Unknown values
+fail at provider construction. Development Compose defaults to Gemini; AWS defaults
+to Bedrock. Each cycle chooses a single planner or a panel of 1–5 planners (default
+3). Both modes implement the same planner protocol and may return alternatives.
 
 The risk provider receives only bounded observed/forecast signal references that the
 platform has already found temporally eligible. It returns selected immutable
@@ -85,11 +88,20 @@ run ID and exactly the baseline's frozen disruptions, context version, and state
 version. Refresh calls are safe: completed retained metrics are returned without another
 result fetch.
 
-`lexicographic-v1` minimizes, in order, `late_shipments`, `average_delay_hours`, and
+## Ranking defaults
+
+The current hackathon `lexicographic-v1` policy minimizes, in order, `late_shipments`, `average_delay_hours`, and
 `total_cost`; missing configured metrics sort as infinity. Hard-constraint violations
 sort after feasible plans, and proposal ID is the stable tie-breaker. Failed and
 incomplete runs stay in history but are excluded. Provider rationale and deterministic
 ranking explanation are stored separately.
+
+These names are demo-specific defaults, not a required vocabulary for client
+simulation results. The automatic planning API uses these ranking defaults, and the
+UI prioritizes the same metric names. Free-text planning objectives do not replace
+the ranking metric tuple. A client using other performance measures needs an explicit
+ranking adaptation for meaningful automatic recommendations; connecting its simulator
+alone does not make this part industry-neutral.
 
 Lifecycle values are `PROPOSED`, `VALIDATED`, `SUBMITTED`, `RUNNING`, `EVALUATED`,
 `FAILED`, `RECOMMENDED`, `APPROVED`, and `REJECTED`. Only a deterministically ranked
@@ -112,11 +124,10 @@ codes/messages. Reusing canonical inputs produces the same idempotency key.
 Planning-provider API failures return sanitized `502` responses (`429` for quota
 exhaustion) instead of unhandled server errors.
 
-To add a real provider later, implement `RiskProvider`, `HypothesisProvider`, or
-`PlannerProvider` and add an explicit factory branch. Providers receive only typed
-requests. The stub panel is a bounded coordinator with three role-labelled drafts; it
-does not implement voting, open conversation, dynamic membership, or partial-panel
-recovery.
+Gemini and Bedrock implement `RiskProvider`, `HypothesisProvider`, and
+`PlannerProvider` using typed requests. Panel membership is fixed by the cycle
+configuration. Bedrock panels retain successful results if another role fails;
+Gemini panels propagate failures. Neither implements voting or open conversation.
 
 ## Planning UI contract
 
@@ -147,7 +158,7 @@ Queued baselines and intervention runs are polled automatically through the cycl
 advance operation. Once the baseline completes, AEGIS persists a non-authoritative copy
 of its result in the cycle snapshot, derives allowed target IDs from the frozen
 scenario, and supplies the result unchanged to the cycle's selected single planner or
-bounded deterministic stub panel. The same baseline response contains both results and client-validated plans; the
+configured panel. The same baseline response contains both results and client-validated plans; the
 first-party UI has no separate plan-generation form or raw entity-ID input. Default or
 cycle-frozen objectives and constraints are used for this invocation. The explicit
 proposals endpoint remains only for API compatibility. Each returned alternative can be

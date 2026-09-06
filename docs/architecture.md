@@ -6,9 +6,21 @@ failures never trigger fallback or dual writes. DynamoDB uses one on-demand tabl
 sparse indexes, explicit reverse references, and bounded conditional transactions.
 `/health/storage` probes whichever adapter was selected.
 
+The DynamoDB adapter uses conditional transactions on selected paths, not for every
+mutation. Evidence updates can overwrite concurrent changes, and duplicate cleanup
+deletes records sequentially and can stop after partial completion. See
+[Concurrency and failure semantics](dynamodb-data-model.md#concurrency-and-failure-semantics)
+for the current guarantees and limitations.
+
 AEGIS is a platform around an authoritative, separately deployed operational client.
-It owns evidence and review workflows, but it does not own the client's network,
-shipments, inventory, entity registry, simulation rules, or calculated results.
+The client defines its operational entities, resources, processes, operating rules,
+and performance measures. AEGIS owns the surrounding evidence and review workflows;
+the client remains authoritative for operational state and simulated outcomes.
+
+This boundary supports different industries when their simulation systems implement
+the [client integration contract](client-integration-contract.md). Entity types and
+change schemas come from the client. The current ranking defaults retain demo-specific
+metrics, as described in [Simulation and planning](simulation-and-planning.md#ranking-defaults).
 
 There are two related execution paths:
 
@@ -46,8 +58,9 @@ boundary. Context-sensitive operations carry the applicable context, state, cata
 schema, or capability versions. Run polling is keyed by the client run ID, and result
 retrieval is associated with the frozen versions held by the experiment or planning
 cycle. Tests inject `FakeClientGateway`; production cannot fall back to local
-operational tables. Platform PostgreSQL contains no nodes, edges, shipments, aliases,
-client schemas, simulation rules, client disruptions, or local simulation runs.
+operational tables. Platform PostgreSQL does not serve as the operational entity registry or store the
+client's simulation engine. It retains client references and workflow snapshots
+rather than owning operational records or executing simulations.
 
 Provider calls, including Bedrock Converse calls, are separate untrusted external boundaries.
 Provider selection is centralized in the integration factory. Providers cannot write
@@ -89,9 +102,9 @@ Only disruptions marked `APPLY_IN_SIMULATION` become active simulator inputs;
 `ALREADY_REFLECTED` items remain in the audit scenario, and `UNKNOWN` blocks
 submission to avoid double counting.
 
-Each cycle freezes one planner mode: a single `PlannerProvider`, the deterministic stub
-panel when configured for stub panel mode, or the configured Bedrock planner for Bedrock
-panel mode. `PlanningService` validates all provider output and coordinates the
+Each cycle freezes its planner mode (`single` or `panel`) and panel agent count
+(1–5, default 3). The configured provider selects stub, Gemini, or Bedrock adapters.
+Model panels use individual `planner_1` through `planner_5` prompt overrides. `PlanningService` validates all provider output and coordinates the
 `ClientGateway`. The client validates interventions, executes baseline and intervention
 simulations, and calculates metrics. A deterministic `lexicographic-v1` policy ranks
 completed plan results. Only an explicit API/UI action can approve or reject a plan;
@@ -104,9 +117,9 @@ models; providers do not import database models or write records.
 
 ## Prompt configuration
 
-Filter, interpreter, and planner Bedrock system prompts have safe built-in defaults and
+Filter, interpreter, and planner Gemini and Bedrock system prompts have safe built-in defaults and
 may be overridden by an operator through `/api/settings/prompts`. Overrides are stored
-in `agent_prompts` and are read when providers are constructed. They guide untrusted
+in PostgreSQL `agent_prompts` or DynamoDB `PROMPT#agent` items and are read when providers are constructed. They guide untrusted
 model output but do not replace schema validation, client validation, version checks,
 or human decision boundaries. Risk and hypothesis prompts are not currently
 operator-configurable through this API.

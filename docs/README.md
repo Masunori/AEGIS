@@ -1,13 +1,15 @@
 # AEGIS documentation
 
+AEGIS coordinates evidence review and simulation-based planning around a client-owned
+operational system. The client supplies the industry model and simulator; these docs
+explain how the platform connects to it and what the current implementation supports.
+
 ## New-contributor path
 
 1. [Getting started](getting-started.md)
 2. [Architecture](architecture.md)
 3. [Ingestion and review](ingestion-and-review.md)
 4. [Simulation and planning](simulation-and-planning.md)
-   - [Reviewed scenario iteration roadmap](planning-iteration-roadmap.md)
-   - [Hypothesis and stub panel roadmap](hypothesis-and-planner-panel-roadmap.md)
 
 ## Find documentation by task
 
@@ -21,11 +23,7 @@
 | Work on providers or orchestration | [AI and workflow](ai-and-workflow.md) |
 | Find an endpoint | [API reference](api-reference.md) |
 | Configure or deploy the stack | [Operations](operations.md) |
-| Deploy the low-cost hackathon stack | [Serverless hackathon deployment roadmap](serverless-hackathon-deployment-roadmap.md) |
 | Implement DynamoDB persistence | [DynamoDB data model](dynamodb-data-model.md) |
-| Plan DynamoDB repository implementation | [DynamoDB implementation map](dynamodb-implementation-map.md) |
-| Review PostgreSQL repository compliance | [PostgreSQL repository-contract migration](persistence-migration.md) |
-| Review or smoke-test Bedrock | [Bedrock verification](bedrock-verification.md) |
 
 ## Suggested code-reading path
 
