@@ -100,7 +100,7 @@ def test_rejected_evidence_does_not_create_a_signal(test_session_factory):
 def test_unresolved_signal_cannot_be_accepted(test_session_factory):
     source = create_source(DataSourceCreate(name="Reports", type=SourceType.UPLOAD))
     evidence, _ = store_evidence(EvidenceCreate(source_id=source.id, kind=EvidenceKind.UPLOAD,
-        title="Port alert", media_type="text/plain", content="PSA Singapore port may close"))
+        title="Port alert", media_type="text/plain", content="Singapore Port port may close"))
     signal = run(process_evidence(evidence.id, gateway=gateway(), providers=providers()))
     assert signal.entities[0].status == "NOT_FOUND"
     assert signal.processing_state == "NEEDS_RESOLUTION"
@@ -153,7 +153,7 @@ def test_related_entities_are_retained_but_only_targets_are_mapped(test_session_
     evidence, _ = store_evidence(EvidenceCreate(
         source_id=source.id, kind=EvidenceKind.UPLOAD, title="Network disruption",
         media_type="text/plain", content=(
-            "Hai Phong may close, delaying Supplier VN cargo through PSA Singapore "
+            "Hai Phong may close, delaying Supplier VN cargo through Singapore Port "
             "and Singapore Warehouse to Customer SG."
         ),
     ))
@@ -162,7 +162,7 @@ def test_related_entities_are_retained_but_only_targets_are_mapped(test_session_
 
     assert signal.processing_state == "READY_FOR_REVIEW"
     assert [entity.mention for entity in signal.entities] == [
-        "Hai Phong", "Supplier VN", "PSA Singapore",
+        "Hai Phong", "Supplier VN", "Singapore Port",
         "Singapore Warehouse", "Customer SG",
     ]
     assert [entity.mention for entity in signal.entities if entity.is_target] == ["Hai Phong"]

@@ -24,18 +24,42 @@ metrics, as described in [Simulation and planning](simulation-and-planning.md#ra
 
 There are two related execution paths:
 
-```text
-evidence -> provider assessment -> interpretation proposal
--> client-authoritative entity resolution -> client-normalized disruption
--> human signal review -> immutable experiment package
--> client simulation -> non-authoritative platform result copy
+The signal and experiment path turns evidence into a reviewed disruption and measures
+its simulated impact.
 
-eligible accepted signals + confirmed browser hypotheses
--> risk scenarios -> client validation and state reconciliation
--> human scenario composition -> baseline client simulation
--> planner proposals -> client-validated interventions
--> intervention simulations -> deterministic ranking -> human decision
+```text
+evidence
+-> provider assessment
+-> interpretation proposal
+-> client-authoritative entity resolution
+-> client-normalized disruption
+-> human signal review
+-> immutable experiment package
+-> client simulation
+-> non-authoritative platform result copy
 ```
+
+The planning path compares responses to a scenario and records
+the operator's decision.
+
+```text
+eligible accepted signals + confirmed browser hypotheses
+-> risk scenarios
+-> client validation and state reconciliation
+-> human scenario composition
+-> baseline client simulation
+-> planner proposals
+-> client-validated interventions
+-> intervention simulations
+-> deterministic ranking
+-> human decision
+```
+
+Accepted signals connect the two paths: they can inform both an experiment and a
+planning scenario. Planning does not require a completed experiment first; it runs
+its own baseline and intervention simulations.
+
+
 
 The second path is stored as a `planning_cycles` workflow snapshot. It does not create
 an `experiment_packages` row for its baseline or plan simulations, and it does not use
@@ -117,9 +141,5 @@ models; providers do not import database models or write records.
 
 ## Prompt configuration
 
-Filter, interpreter, and planner Gemini and Bedrock system prompts have safe built-in defaults and
-may be overridden by an operator through `/api/settings/prompts`. Overrides are stored
-in PostgreSQL `agent_prompts` or DynamoDB `PROMPT#agent` items and are read when providers are constructed. They guide untrusted
-model output but do not replace schema validation, client validation, version checks,
-or human decision boundaries. Risk and hypothesis prompts are not currently
-operator-configurable through this API.
+Prompt behavior and operator overrides are documented in
+[AI and workflow](ai-and-workflow.md#operator-prompt-configuration).

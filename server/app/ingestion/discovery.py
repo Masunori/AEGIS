@@ -275,7 +275,7 @@ async def discover_and_scrape_source(
             if entry.url in seen:
                 continue
             seen.add(entry.url)
-            if not robots.can_fetch("PSA-ESG-Discovery/1.0", entry.url):
+            if not robots.can_fetch("Aegis-ESG-Discovery/1.0", entry.url):
                 skipped += 1
                 continue
             try:

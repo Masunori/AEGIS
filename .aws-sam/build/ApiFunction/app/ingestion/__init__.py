@@ -1,1 +1,0 @@
-"""Deterministic source ingestion adapters."""

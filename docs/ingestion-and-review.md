@@ -1,96 +1,78 @@
 # Ingestion and review
 
-Uploads, websites, feeds, APIs, structured records, and manual entries all write
-directly to canonical `evidence`. Content hashes deduplicate raw content while retaining
-provenance. Scheduled website collection is bounded by same-site, robots, depth, page,
-path, and keyword controls.
+Sources and uploads become canonical `evidence`. Evidence is assessed, interpreted,
+grounded through the client, and presented for human review before it can become an
+accepted signal.
 
-Automatic collection is opt-in twice: `ENABLE_SOURCE_SCHEDULER=true` starts the local
-process scheduler, and each website scraper must independently enable its schedule.
-Development Compose enables the global switch; the application fallback and AWS
-disable it. Per-source scheduling defaults off. The Sources UI displays global and per-scraper state; manual
-collection remains available while automatic scheduling is off. The Lambda adapter
-disables ASGI lifespan, so it never starts this scheduler. The current SAM template
-does not configure an EventBridge collection dispatcher.
+```text
+source or upload
+→ canonical evidence
+→ assessment
+→ interpretation
+→ client grounding and mapping
+→ human review
+→ accepted or rejected signal
+```
 
-Evidence assessment and signal interpretation preserve provider metadata separately
-from deterministic review state. Hypothetical signals cannot claim supporting
-evidence. Unresolved or ambiguous entities remain review-blocking, and accepted signals
-retain the client context and disruption catalog versions used for grounding.
+## Evidence and sources
 
-Filtering and interpretation are protocol-based. Development Compose defaults to Gemini;
-deterministic stubs are available for repeatable runs. With Gemini or Bedrock, the filter classifies evidence into
-`ACCEPT`, `REVIEW`, `REJECT`, or `QUARANTINE`; only accepted evidence proceeds to the
-interpreter. The interpreter proposes classification, signal type, textual entity
-mentions, time window, probability, severity, and extraction confidence. Both adapters
-request structured JSON and enforce the existing Pydantic contracts locally, with
-bounded correction attempts for schema-invalid answers.
+The platform accepts website and feed collection, APIs, structured records, uploads,
+and manual entries. Content hashes deduplicate raw content while preserving
+provenance. Website collection applies bounded same-site, robots, depth, page, path,
+and keyword controls.
 
-Signal types are constrained to the exact types in the client's current
-`/disruption-contracts` catalog. That catalog is provided to the interpreter as
-untrusted capability data and the same snapshot is reused during mapping.
+Automatic collection requires both the global scheduler and a per-source opt-in.
+Manual collection remains available when scheduling is disabled. Defaults and
+Lambda/Compose behavior are documented in [Operations](operations.md).
 
-Interpretation separates `entity_mentions` from `target_entity_mentions`. All
-operational entities explicitly present in evidence are grounded and retained for
-context. Only target entities are checked against the selected disruption contract and
-sent to effect mapping as `target_ids`. An unresolved related entity therefore remains
-visible without incorrectly blocking a valid mapping for a resolved target. Historical
-entity rows created before this distinction are conservatively treated as targets.
+## Assessment and interpretation
 
-## Rejected-signal reprocessing
+The filter classifies evidence as `ACCEPT`, `REVIEW`, `REJECT`, or `QUARANTINE`; only
+accepted evidence proceeds to interpretation. The interpreter proposes a signal type,
+classification, time window, probability, severity, confidence, and textual entity
+mentions. Signal types must match the connected client's current disruption catalog.
 
-Rejecting a candidate preserves its immutable signal, mapping outcome, provider
-metadata, and evidence provenance. When every signal attempt for an evidence item is
-rejected, the Evidence workspace enables **Reprocess**. Reprocessing creates a new
-pending `SignalRecord` whose `retry_of_signal_id` points to the most recent rejected
-attempt; it never overwrites or reopens the rejected record. A pending or accepted
-attempt blocks further retries, preventing multiple active candidates for the same
-evidence in normal operation.
+Provider implementations, structured-output validation, retries, and prompt behavior
+are documented in [AI and workflow](ai-and-workflow.md). Provider output remains a
+proposal: deterministic orchestration and the client gateway perform grounding,
+normalization, and semantic validation.
 
-Evidence remains protected from permanent deletion while any signal history refers to
-it, including rejected history. Archive and raw-content removal remain the appropriate
-retention-safe actions. A destructive purge of rejected history is intentionally not
-part of ordinary evidence management.
+## Review lifecycle
 
-Mapping is synchronous. Unexpected local mapping exceptions are persisted as terminal
-`MAPPING_FAILED` / `PROCESSING_FAILED` outcomes with a safe retry message, so the UI
-does not imply that background work is continuing. Nullable JSON Schema type unions
-advertised by the client are supported during local payload validation.
+A signal attempt is immutable and retains its evidence provenance, mapping outcome, and
+provider metadata. Human review is required before activation. Accepted signals retain
+the client context and disruption-catalog versions used for grounding.
 
-If Bedrock remains rate-limited after the SDK retry policy is exhausted, collection stops invoking the
-provider for that run and marks the current and remaining new evidence as deferred.
-The evidence remains stored. Use **Process / retry** on its Evidence card, or call
-`POST /api/evidence/{id}/process`, after provider capacity recovers; this does not
-scrape the source again. Evidence with a pending or accepted signal attempt cannot be reprocessed;
-all-rejected history allows a new attempt. Duplicate occurrence records cannot be
-processed through this endpoint.
+If every attempt for an evidence item is rejected, the Evidence workspace enables
+**Reprocess** (or `POST /api/evidence/{id}/process`). This creates a new pending attempt
+whose `retry_of_signal_id` points to the latest rejected attempt; it never reopens or
+overwrites history. Pending or accepted attempts block another retry. Duplicate
+occurrences cannot be processed through this endpoint.
 
-Schema compliance does not make an LLM answer operationally authoritative. Entity
-mentions are grounded through the client gateway, mapped disruptions pass local JSON
-Schema validation and client semantic validation, and signals still require human
-review before activation.
+Mapping is synchronous. Unexpected mapping errors are recorded as terminal
+`MAPPING_FAILED` / `PROCESSING_FAILED` outcomes with a retryable message. If provider
+capacity is exhausted, the current run's new evidence is deferred; use **Process /
+retry** after capacity recovers without scraping the source again.
 
-The former raw-document, assessment, intelligence-event, and disruption-candidate
-workflow has been removed. No compatibility table or API remains.
+## Entity handling
 
-## Evidence deletion and duplicates
+Interpretation separates `entity_mentions` (all operational entities mentioned in the
+evidence) from `target_entity_mentions` (entities directly affected). All mentions are
+grounded and retained for context, while only targets compatible with the selected
+disruption contract become mapping targets. Unresolved related entities therefore remain
+visible without blocking a valid target mapping.
 
-Permanent deletion is intentionally blocked when evidence is referenced by signal
-history, duplicate provenance, or legal hold. The Evidence workspace previews this
-impact before sending `DELETE`, explains the blocker, and offers archive or raw-content
-removal as audit-safe alternatives.
+## Retention, deletion, and duplicates
 
-Canonical evidence is hidden from permanent deletion while duplicate records point to
-it. Enable **Include duplicates** in the Evidence workspace, review and remove the
-dependent duplicate records first, then retry the canonical item. Duplicate records
-are labelled with the canonical evidence ID they reference.
+Permanent deletion is blocked while evidence is referenced by signal history, duplicate
+provenance, or legal hold. The Evidence workspace previews blockers and offers archive
+or raw-content removal as retention-safe alternatives.
 
-Canonical evidence cards also provide **Delete unprotected duplicates**. A preview
-counts eligible and protected direct duplicates before confirmation. PostgreSQL performs the cleanup in one database transaction. DynamoDB deletes
-eligible duplicates sequentially, so an error can leave a partially completed cleanup.
-Successful responses report deleted IDs and skipped protected records. API callers may request `delete_canonical=true`; the canonical record
-is deleted only if it is unprotected after duplicate cleanup.
+Canonical evidence cannot be deleted while duplicate records point to it. Enable
+**Include duplicates**, remove eligible dependent duplicates, then retry the canonical
+item. **Delete unprotected duplicates** previews eligible and protected records before
+confirmation. PostgreSQL performs cleanup transactionally; DynamoDB deletes sequentially
+and may stop partway through an error. Protected records and provenance are preserved.
 
-Collection continues to retain lightweight duplicate occurrence records by default.
-The batch operation deliberately does not replace canonical content or erase protected
-provenance.
+Collection retains lightweight duplicate-occurrence records by default and never
+replaces canonical content during cleanup.

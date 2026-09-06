@@ -86,7 +86,8 @@ To use your own local demo client instead, keep the example file's
 Existing `.env.local` values override the new defaults: replace previous `bedrock`
 provider selections with `gemini`, and set `ENABLE_SOURCE_SCHEDULER=true`.
 Each scraper must also have **Schedule automatic collection** enabled in Sources.
-The development database uses the fixed local credentials `psa` / `psa`.
+The development database uses database `aegis` and fixed local credentials `aegis` / `aegis`.
+For existing installations, follow the [database rename and redeployment guide](docs/database-name-redeployment.md) before recreating containers.
 
 ```bash
 docker compose --env-file .env.local -f compose.dev.yml up -d --build --wait
@@ -138,7 +139,7 @@ instead of reusing `.env.local`:
 | `ClientGatewayUrl` | Yes | Reachable deployed client integration API URL |
 | `ClientGatewayToken` | If the client requires authentication | Bearer token; defaults to empty |
 | `BedrockModelId` | Yes | Bedrock model or inference profile ID |
-| `TableName` | No | DynamoDB table name; defaults to `psa-production` |
+| `TableName` | No | DynamoDB table name; defaults to `production` |
 
 The template sets `PERSISTENCE_BACKEND=dynamodb`, the table name, all five AI
 providers to `bedrock`, `BEDROCK_REGION` to the deployment region, and

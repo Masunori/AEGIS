@@ -164,7 +164,7 @@ cd ..
 ```
 
 The fixture uses Region `ap-southeast-1` by default; override it with
-`DYNAMODB_LOCAL_REGION`. Each test table is named `psa-test-<uuid>`, created on demand,
+`DYNAMODB_LOCAL_REGION`. Each test table is named `test-<uuid>`, created on demand,
 and deleted after the test. A failed test may leave an isolated table; restart the
 in-memory container to clear all local data:
 

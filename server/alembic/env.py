@@ -16,7 +16,7 @@ if config.config_file_name is not None:
 
 database_url = os.environ.get(
     "DATABASE_URL",
-    "postgresql+psycopg://psa:psa@localhost:5432/psa",
+    "postgresql+psycopg://aegis:aegis@localhost:5432/aegis",
 )
 config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
 target_metadata = Base.metadata

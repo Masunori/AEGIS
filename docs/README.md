@@ -38,7 +38,5 @@ server/app/main.py
 → server/tests/test_<capability>.py
 ```
 
-The repository contains two connected workflows: reviewed signals can become immutable
-`experiment_packages`, while risk and mitigation evaluation is retained in
-`planning_cycles`. Read [Architecture](architecture.md) before changing either workflow
-or the platform/client ownership boundary.
+The workflow relationship and platform/client ownership boundary are described in
+[Architecture](architecture.md).

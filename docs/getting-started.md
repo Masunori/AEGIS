@@ -8,11 +8,8 @@ or start your own standalone demo client on port 8100. For your own client, conf
 Local Compose uses PostgreSQL, Gemini, and globally enabled scheduled collection.
 From the repository root, copy `.env.local.example` to `.env.local` and set
 `GEMINI_API_KEY`. Enable scheduling separately for each desired source in the UI.
-Use `stub` for all five provider variables if you want cloud-free AI development.
-Provider and model changes require rerunning Compose with `--env-file .env.local`;
-a plain container restart does not apply new values. For mixed providers or Bedrock,
-see [Switching local AI providers](operations.md#switching-local-ai-providers).
-AWS defaults are documented in [operations](operations.md).
+For provider choices, credentials, and deployment settings, see
+[Operations](operations.md).
 
 ```bash
 docker compose --env-file .env.local -f compose.dev.yml up -d --build --wait

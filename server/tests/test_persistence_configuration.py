@@ -31,7 +31,7 @@ def test_dynamodb_backend_requires_and_accepts_complete_configuration(
     monkeypatch.delenv("DYNAMODB_TABLE_NAME", raising=False)
     with pytest.raises(Exception, match="DYNAMODB_TABLE_NAME"):
         get_storage()
-    monkeypatch.setenv("DYNAMODB_TABLE_NAME", "psa-runtime")
+    monkeypatch.setenv("DYNAMODB_TABLE_NAME", "runtime")
     monkeypatch.setenv("AWS_REGION", "ap-southeast-1")
     assert get_storage().backend == "dynamodb"
 

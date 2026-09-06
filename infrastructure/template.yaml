@@ -1,11 +1,11 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: PSA serverless API and persistence resources
+Description: Aegis serverless API and persistence resources
 
 Parameters:
   TableName:
     Type: String
-    Default: psa-production
+    Default: production
 
   ClientOrigin:
     Type: String

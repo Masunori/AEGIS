@@ -112,7 +112,7 @@ def repository_factories(test_session_factory, request):
         endpoint_url=require_local_endpoint(endpoint),
         aws_access_key_id="localTestKey", aws_secret_access_key="localTestSecret",
     )
-    table = create_table(resource, f"psa-contract-{uuid4().hex}")
+    table = create_table(resource, f"contract-{uuid4().hex}")
     factories = {
         "source": lambda: DynamoSourceRepository(table),
         "evidence": lambda: DynamoEvidenceRepository(table),

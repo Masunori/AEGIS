@@ -81,7 +81,7 @@ class StubInterpreterProvider:
     async def interpret(self, request: InterpretationRequest) -> InterpretationProposal:
         text = " ".join(filter(None, [request.evidence.title, request.evidence.content or ""])).casefold()
         mentions = [name for name in (
-            "Hai Phong", "Supplier VN", "PSA Singapore",
+            "Hai Phong", "Supplier VN", "Singapore Port",
             "Singapore Warehouse", "Customer SG",
         ) if name.casefold() in text]
         observed = any(word in text for word in ("has closed", "is closed", "observed"))

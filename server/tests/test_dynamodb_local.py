@@ -51,8 +51,8 @@ class _FakeResource:
 
 
 def test_schema_has_primary_keys_indexes_and_on_demand_billing() -> None:
-    definition = table_definition("psa-test-one")
-    assert definition["TableName"] == "psa-test-one"
+    definition = table_definition("test-one")
+    assert definition["TableName"] == "test-one"
     assert definition["BillingMode"] == "PAY_PER_REQUEST"
     assert definition["KeySchema"] == [
         {"AttributeName": "PK", "KeyType": "HASH"},
@@ -70,10 +70,10 @@ def test_schema_has_primary_keys_indexes_and_on_demand_billing() -> None:
 
 def test_table_lifecycle_waits_and_enables_ttl() -> None:
     resource = _FakeResource()
-    table = create_table(resource, "psa-test-lifecycle")
+    table = create_table(resource, "test-lifecycle")
     assert table.waited_for_create
     assert resource.meta.client.ttl_request == {
-        "TableName": "psa-test-lifecycle",
+        "TableName": "test-lifecycle",
         "TimeToLiveSpecification": {"Enabled": True, "AttributeName": TTL_ATTRIBUTE},
     }
     delete_table(table)
@@ -101,7 +101,7 @@ def local_dynamodb_table():
         pytest.skip("set DYNAMODB_LOCAL_ENDPOINT to run against DynamoDB Local")
     endpoint = require_local_endpoint(configured_endpoint)
     region = os.getenv("DYNAMODB_LOCAL_REGION", "ap-southeast-1")
-    table_name = f"psa-test-{uuid4().hex}"
+    table_name = f"test-{uuid4().hex}"
     resource = boto3.resource(
         "dynamodb",
         region_name=region,

@@ -20,7 +20,7 @@ def test_settings_require_a_valid_table_and_region(monkeypatch: pytest.MonkeyPat
     with pytest.raises(ValidationError, match="TABLE_NAME"):
         DynamoSettings.from_environment()
 
-    monkeypatch.setenv("DYNAMODB_TABLE_NAME", "psa-test")
+    monkeypatch.setenv("DYNAMODB_TABLE_NAME", "test")
     monkeypatch.setenv("AWS_REGION", "not a region")
     with pytest.raises(ValidationError, match="AWS_REGION"):
         DynamoSettings.from_environment()
@@ -46,7 +46,7 @@ def test_client_is_reused_without_static_credentials(monkeypatch: pytest.MonkeyP
 
     client.reset_clients()
     monkeypatch.setattr(client.boto3, "resource", fake_resource)
-    settings = DynamoSettings("psa-test", "ap-southeast-1")
+    settings = DynamoSettings("test", "ap-southeast-1")
     assert client.get_table(settings)[1] is resource
     assert client.get_table(settings)[1] is resource
     assert len(seen) == 1
