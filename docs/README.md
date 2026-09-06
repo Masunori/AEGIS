@@ -23,6 +23,7 @@ explain how the platform connects to it and what the current implementation supp
 | Work on providers or orchestration | [AI and workflow](ai-and-workflow.md) |
 | Find an endpoint | [API reference](api-reference.md) |
 | Configure or deploy the stack | [Operations](operations.md) |
+| Deploy Lambda, DynamoDB, and Bedrock on AWS | [AWS deployment](aws-deployment.md) |
 | Implement DynamoDB persistence | [DynamoDB data model](dynamodb-data-model.md) |
 
 ## Suggested code-reading path

@@ -1,5 +1,8 @@
 # Operations
 
+For step-by-step Lambda, DynamoDB, and Bedrock deployment instructions, see
+[Deploying AEGIS on AWS](aws-deployment.md).
+
 ## Integration configuration
 
 Local Compose defaults to PostgreSQL, Gemini, and enabled scheduled collection.
